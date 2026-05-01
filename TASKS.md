@@ -307,7 +307,7 @@ WAJIB:
 
 * tidak ada text teknis
 * font tidak terlalu besar
-* tombol besar
+* tombol mudah disentuh
 * spacing rapi
 
 ---

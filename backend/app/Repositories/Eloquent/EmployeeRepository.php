@@ -7,6 +7,7 @@ use App\DTOs\Employee\EmployeeListQueryDTO;
 use App\Models\Employee;
 use App\Repositories\Contracts\EmployeeRepositoryInterface;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Collection;
 
 class EmployeeRepository implements EmployeeRepositoryInterface
 {
@@ -56,6 +57,41 @@ class EmployeeRepository implements EmployeeRepositoryInterface
             ->first();
     }
 
+    public function countActive(): int
+    {
+        return Employee::query()
+            ->where('is_active', true)
+            ->count();
+    }
+
+    public function getActiveEmployees(): Collection
+    {
+        return Employee::query()
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get();
+    }
+
+    public function getEmployeesByIds(array $employeeIds): Collection
+    {
+        if ($employeeIds === []) {
+            return collect();
+        }
+
+        return Employee::query()
+            ->whereIn('id', $employeeIds)
+            ->orderBy('name')
+            ->get();
+    }
+
+    public function getUpdatedSince(string $updatedSince): Collection
+    {
+        return Employee::query()
+            ->where('updated_at', '>=', $updatedSince)
+            ->orderBy('updated_at')
+            ->get();
+    }
+
     public function update(Employee $employee, EmployeeDataDTO $payload, int $updatedByUserId): Employee
     {
         $employee->fill([
@@ -76,5 +112,16 @@ class EmployeeRepository implements EmployeeRepositoryInterface
         $employee->save();
 
         return $employee->refresh();
+    }
+
+    public function softDelete(Employee $employee, int $updatedByUserId): Employee
+    {
+        $employee->fill([
+            'updated_by_user_id' => $updatedByUserId,
+        ]);
+        $employee->save();
+        $employee->delete();
+
+        return $employee;
     }
 }

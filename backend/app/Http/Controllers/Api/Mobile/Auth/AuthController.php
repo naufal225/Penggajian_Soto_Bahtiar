@@ -7,8 +7,10 @@ use App\Exceptions\InvalidCredentialsException;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\Mobile\Auth\LoginRequest;
 use App\Services\Auth\AuthService;
+use App\Support\ApiErrorCode;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class AuthController extends Controller
 {
@@ -26,7 +28,7 @@ class AuthController extends Controller
         } catch (InvalidCredentialsException) {
             return ApiResponse::error(
                 message: 'Email atau password salah',
-                code: 'UNAUTHORIZED',
+                code: ApiErrorCode::UNAUTHORIZED,
                 status: 401,
             );
         }
@@ -34,6 +36,24 @@ class AuthController extends Controller
         return ApiResponse::success(
             message: 'Login berhasil',
             data: $responseDTO->toArray(),
+        );
+    }
+
+    public function logout(Request $request): JsonResponse
+    {
+        $this->authService->logout($request->user());
+
+        return ApiResponse::success(
+            message: 'Logout berhasil',
+            data: null,
+        );
+    }
+
+    public function me(Request $request): JsonResponse
+    {
+        return ApiResponse::success(
+            message: 'Profil user berhasil diambil',
+            data: $this->authService->currentUserProfile($request->user()),
         );
     }
 }

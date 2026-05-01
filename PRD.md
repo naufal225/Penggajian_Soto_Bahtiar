@@ -57,7 +57,7 @@ Menyediakan aplikasi mobile yang intuitif dan cepat dipakai owner untuk mencatat
 * Owner bisa input gaji harian dalam waktu singkat
 * Owner tidak perlu memahami istilah teknis
 * Owner tetap bisa bekerja saat offline
-* Tampilan sederhana, tombol besar, alur jelas, minim langkah
+* Tampilan sederhana, tombol mudah disentuh, ukuran teks proporsional, alur jelas, minim langkah
 
 ---
 
@@ -108,7 +108,7 @@ Karakteristik:
 
 * Gunakan bahasa sederhana dan operasional
 * Hindari istilah teknis internal sistem
-* Tombol besar dan jelas
+* Tombol mudah disentuh dan jelas
 * Setiap layar punya satu tujuan utama
 * Minim input yang tidak perlu
 * Error message harus mudah dipahami
@@ -217,7 +217,7 @@ Memberi orientasi cepat dan akses ke aksi utama.
 
 * Tanggal hari ini
 * Status sinkronisasi
-* Tombol besar:
+* Tombol aksi utama yang mudah disentuh:
 
   * Gaji Hari Ini
   * Pembayaran Minggu Ini
@@ -635,7 +635,7 @@ Untuk mencegah duplikasi create saat retry, mobile disarankan mengirim **client 
 
 ## Risiko 2: UI terlalu rumit untuk owner
 
-**Mitigasi:** fokus ke tombol besar, bahasa sederhana, satu layar satu tujuan.
+**Mitigasi:** fokus ke tombol jelas, ukuran teks sedang, bahasa sederhana, satu layar satu tujuan.
 
 ## Risiko 3: Flow pembayaran ambigu
 

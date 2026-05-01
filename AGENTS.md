@@ -115,8 +115,8 @@ Urutan prioritas implementasi:
 * DILARANG istilah teknis
 * Layout:
 
-  * tombol besar
-  * font besar
+  * tombol mudah disentuh
+  * font ukuran sedang dan nyaman dibaca
   * minim teks
 * 1 layar = 1 tujuan
 * Istilah wajib:

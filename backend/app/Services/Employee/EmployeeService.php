@@ -5,6 +5,7 @@ namespace App\Services\Employee;
 use App\DTOs\Employee\EmployeeDataDTO;
 use App\DTOs\Employee\EmployeeListQueryDTO;
 use App\Exceptions\EmployeeNotFoundException;
+use App\Exceptions\ForbiddenActionException;
 use App\Models\Employee;
 use App\Repositories\Contracts\EmployeeRepositoryInterface;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
@@ -62,6 +63,21 @@ class EmployeeService
         $employee = $this->findOrFail($employeeId);
 
         return $this->employeeRepository->setActiveStatus($employee, true, $updatedByUserId);
+    }
+
+    /**
+     * @throws EmployeeNotFoundException
+     * @throws ForbiddenActionException
+     */
+    public function delete(int $employeeId, int $updatedByUserId): Employee
+    {
+        $employee = $this->findOrFail($employeeId);
+
+        if ((bool) $employee->is_active) {
+            throw new ForbiddenActionException('Karyawan masih aktif');
+        }
+
+        return $this->employeeRepository->softDelete($employee, $updatedByUserId);
     }
 
     /**

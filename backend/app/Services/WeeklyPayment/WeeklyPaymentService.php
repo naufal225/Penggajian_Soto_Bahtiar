@@ -5,6 +5,7 @@ namespace App\Services\WeeklyPayment;
 use App\DTOs\WeeklyPayment\WeeklyPaymentResponseDTO;
 use App\Enums\PaymentScope;
 use App\Exceptions\EmployeeNotFoundException;
+use App\Exceptions\ForbiddenActionException;
 use App\Exceptions\PaymentAlreadyCompletedException;
 use App\Exceptions\PaymentNotFoundException;
 use App\Exceptions\WeekAlreadyFullyPaidException;
@@ -211,6 +212,7 @@ class WeeklyPaymentService
     /**
      * @return array<string, mixed>
      *
+     * @throws ForbiddenActionException
      * @throws PaymentNotFoundException
      */
     public function undoPayment(int $paymentId, ?string $reason, int $userId): array
@@ -222,6 +224,10 @@ class WeeklyPaymentService
 
         if ($payment->is_voided) {
             throw new PaymentNotFoundException();
+        }
+
+        if (! $this->weekPeriodService->isCurrentWeek((int) $payment->week_period_id)) {
+            throw new ForbiddenActionException();
         }
 
         [$updatedPayment, $weekAfterUndo] = DB::transaction(function () use ($payment, $reason, $userId): array {

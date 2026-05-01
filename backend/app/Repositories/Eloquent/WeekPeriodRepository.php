@@ -19,6 +19,7 @@ class WeekPeriodRepository implements WeekPeriodRepositoryInterface
     {
         return WeekPeriod::query()
             ->whereNull('locked_at')
+            ->where('status', '!=', WeekStatus::FullyPaid->value)
             ->orderByDesc('id')
             ->first();
     }

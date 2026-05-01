@@ -112,6 +112,7 @@ UI agent harus mengandalkan `error.code`, bukan parsing message bebas.
 | DAILY_WAGE_LOCKED         | Catatan gaji tidak bisa diubah karena sudah dibayar / terkunci |
 | WEEK_ALREADY_FULLY_PAID   | Minggu sudah fully paid                                        |
 | PAYMENT_ALREADY_COMPLETED | Pembayaran sudah pernah dilakukan                              |
+| PAYMENT_NOT_FOUND         | Data pembayaran tidak ditemukan                                |
 | SYNC_CONFLICT             | Data lokal bentrok dengan status terbaru di server             |
 | FORBIDDEN_ACTION          | Aksi tidak diizinkan                                           |
 | INTERNAL_SERVER_ERROR     | Error tak terduga                                              |
@@ -1141,6 +1142,53 @@ GET /api/mobile/weekly-payments/{paymentId}
 
 ---
 
+## 10.5. Undo Payment (Perbaikan Typo)
+
+Endpoint ini dipakai owner saat terjadi salah klik/salah catat pembayaran di minggu berjalan.
+
+### Endpoint
+
+```http
+POST /api/mobile/weekly-payments/{paymentId}/undo
+```
+
+### Request
+
+```json
+{
+  "reason": "Salah klik bayar semua"
+}
+```
+
+`reason` opsional.
+
+### Behavior
+
+Backend harus:
+
+1. validasi payment ada,
+2. menandai payment sebagai voided (tetap tersimpan sebagai audit trail),
+3. membuka kembali (`unpaid`) `daily_wages` yang terkait payment tersebut,
+4. menghitung ulang status week (`open`, `partial_paid`, `fully_paid`).
+
+### Success Response
+
+```json
+{
+  "success": true,
+  "message": "Undo pembayaran berhasil",
+  "data": {
+    "payment_id": 6,
+    "week_period_id": 3,
+    "status": "undone",
+    "week_status_after_undo": "partial_paid"
+  },
+  "meta": null
+}
+```
+
+---
+
 # 11. REPORTS API
 
 ## 11.1. Export Weekly PDF
@@ -1493,6 +1541,7 @@ Biar agent UI tidak ngawang.
 | Pembayaran Minggu Ini | GET /week-periods/current, GET /week-periods/{id}  |
 | Bayar per Karyawan    | POST /weekly-payments/employee                     |
 | Bayar Semua           | POST /weekly-payments/all                          |
+| Undo Pembayaran       | POST /weekly-payments/{paymentId}/undo             |
 | Riwayat Mingguan      | GET /week-periods                                  |
 | Detail Minggu         | GET /week-periods/{id}                             |
 | Riwayat Pembayaran    | GET /weekly-payments?week_period_id=...            |

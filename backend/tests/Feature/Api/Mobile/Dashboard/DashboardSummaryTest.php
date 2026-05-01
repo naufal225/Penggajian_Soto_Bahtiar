@@ -47,6 +47,7 @@ class DashboardSummaryTest extends TestCase
                 'message' => 'Dashboard berhasil diambil',
                 'data' => [
                     'owner_name' => 'Pak Bahtiar',
+                    'today_total_amount' => 0,
                     'active_employee_count' => 2,
                     'today_filled_count' => 0,
                     'today_unfilled_count' => 2,
@@ -69,6 +70,7 @@ class DashboardSummaryTest extends TestCase
                 'data' => [
                     'today_date',
                     'owner_name',
+                    'today_total_amount',
                     'active_employee_count',
                     'today_filled_count',
                     'today_unfilled_count',

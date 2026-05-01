@@ -143,3 +143,76 @@ Semua endpoint employee:
 - Untuk fase ini, offline hanya untuk baca list dari cache SQLite saat koneksi gagal.
 - TODO penting:
   - CRUD offline queue (create/update/activate/deactivate saat offline) **belum** diimplementasikan.
+
+---
+
+## Update Backend PHASE 2-4 (15 April 2026)
+
+### Endpoint Backend yang Ditambahkan
+- `POST /api/mobile/auth/logout`
+- `GET /api/mobile/me`
+- `GET /api/mobile/week-periods/current`
+- `GET /api/mobile/week-periods`
+- `GET /api/mobile/week-periods/{weekPeriodId}`
+- `GET /api/mobile/daily-wages?date=YYYY-MM-DD`
+- `POST /api/mobile/daily-wages`
+- `PUT /api/mobile/daily-wages/{dailyWageId}`
+- `GET /api/mobile/daily-wages/{dailyWageId}`
+- `GET /api/mobile/daily-wages/history`
+- `POST /api/mobile/weekly-payments/employee`
+- `POST /api/mobile/weekly-payments/all`
+- `GET /api/mobile/weekly-payments`
+- `GET /api/mobile/weekly-payments/{paymentId}`
+- `POST /api/mobile/weekly-payments/{paymentId}/undo` (tambahan untuk kebutuhan undo typo)
+- `GET /api/mobile/reports/weekly-summary-pdf`
+- `POST /api/mobile/sync/push`
+- `GET /api/mobile/sync/pull`
+
+### Fondasi Database yang Ditambahkan
+- Tabel baru:
+  - `week_periods`
+  - `weekly_payments`
+  - `daily_wages`
+  - `mobile_sync_histories`
+- Constraint & index penting:
+  - `unique(employee_id, wage_date)` pada `daily_wages`
+  - `client_uuid` nullable + unique untuk idempotency create sync
+  - index status/date untuk week, wage, payment, dan sync history
+- Amount disimpan sebagai integer (`unsignedBigInteger`) sesuai kontrak rupiah non-float.
+
+### Struktur Backend yang Ditambahkan
+- Model baru: `WeekPeriod`, `DailyWage`, `WeeklyPayment`, `MobileSyncHistory`
+- Enum baru:
+  - `WeekStatus` (`open`, `partial_paid`, `fully_paid`)
+  - `PaymentScope` (`employee`, `all`)
+  - `SyncResultStatus` (`success`, `failed`, `conflict`)
+- Service baru:
+  - `WeekPeriodService`
+  - `DailyWageService`
+  - `WeeklyPaymentService`
+  - `ReportService`
+  - `SyncService`
+- Repository contract + implementation untuk domain baru ditambahkan dan di-bind di `AppServiceProvider`.
+
+### Business Rule & Locking yang Sudah Di-enforce Backend
+- 1 karyawan maksimal 1 gaji per hari (DB unique + guard service).
+- Edit daily wage hanya untuk minggu berjalan.
+- Jika employee-week sudah dibayar, semua record employee-week dianggap locked.
+- Week `fully_paid` otomatis lock (`locked_at`) dan tidak bisa diedit.
+- Payment per employee/all dibungkus transaksi DB dan update status week otomatis.
+- Undo payment menandai payment `voided` (audit trail tetap ada), membuka kembali daily wages terkait, lalu recompute status week.
+- Sync push diproses per item (partial success/conflict), tidak gagal total.
+
+### Testing yang Dilakukan
+- `php artisan test` (PASS, semua test existing lulus).
+- `php artisan route:list --path=api/mobile` (endpoint baru terdaftar lengkap).
+
+### Perubahan Kontrak
+- `API_CONTRACT.md` di-update dengan:
+  - error code `PAYMENT_NOT_FOUND`
+  - endpoint undo pembayaran `POST /api/mobile/weekly-payments/{paymentId}/undo`
+  - mapping endpoint ke screen ditambahkan row `Undo Pembayaran`
+
+### Risiko Tersisa
+- Coverage automated test untuk domain baru (daily wage/week/payment/report/sync) belum lengkap, saat ini baru tervalidasi lewat compile + existing suite.
+- Report PDF memakai generator PDF sederhana internal (tanpa library eksternal), cukup untuk ringkasan operasional namun belum layout kompleks.

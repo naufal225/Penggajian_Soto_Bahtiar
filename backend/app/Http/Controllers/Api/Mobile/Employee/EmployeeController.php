@@ -6,11 +6,13 @@ use App\DTOs\Employee\EmployeeDataDTO;
 use App\DTOs\Employee\EmployeeListQueryDTO;
 use App\DTOs\Employee\EmployeeResponseDTO;
 use App\Exceptions\EmployeeNotFoundException;
+use App\Exceptions\ForbiddenActionException;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\Mobile\Employee\ListEmployeeRequest;
 use App\Http\Requests\Api\Mobile\Employee\StoreEmployeeRequest;
 use App\Http\Requests\Api\Mobile\Employee\UpdateEmployeeRequest;
 use App\Services\Employee\EmployeeService;
+use App\Support\ApiErrorCode;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -126,6 +128,32 @@ class EmployeeController extends Controller
             data: [
                 'id' => $employee->id,
                 'is_active' => (bool) $employee->is_active,
+            ],
+        );
+    }
+
+    public function destroy(Request $request, int $employeeId): JsonResponse
+    {
+        try {
+            $employee = $this->employeeService->delete(
+                employeeId: $employeeId,
+                updatedByUserId: (int) $request->user()->id,
+            );
+        } catch (EmployeeNotFoundException) {
+            return $this->employeeNotFoundResponse();
+        } catch (ForbiddenActionException) {
+            return ApiResponse::error(
+                message: 'Karyawan masih aktif. Nonaktifkan dulu sebelum menghapus',
+                code: ApiErrorCode::FORBIDDEN_ACTION,
+                status: 403,
+            );
+        }
+
+        return ApiResponse::success(
+            message: 'Karyawan berhasil dihapus',
+            data: [
+                'id' => $employee->id,
+                'deleted_at' => $employee->deleted_at?->toISOString(),
             ],
         );
     }

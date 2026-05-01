@@ -172,6 +172,54 @@ class EmployeeCrudTest extends TestCase
             ]);
     }
 
+    public function test_can_soft_delete_inactive_employee(): void
+    {
+        $employee = Employee::factory()->for($this->user, 'createdBy')->create([
+            'name' => 'Slamet',
+            'is_active' => false,
+        ]);
+
+        $response = $this->deleteJson("/api/mobile/employees/{$employee->id}");
+
+        $response
+            ->assertOk()
+            ->assertJson([
+                'success' => true,
+                'message' => 'Karyawan berhasil dihapus',
+                'data' => [
+                    'id' => $employee->id,
+                ],
+            ])
+            ->assertJsonStructure([
+                'data' => ['deleted_at'],
+            ]);
+
+        $this->assertNotNull($response->json('data.deleted_at'));
+
+        $this->assertSoftDeleted('employees', [
+            'id' => $employee->id,
+        ]);
+    }
+
+    public function test_cannot_delete_active_employee(): void
+    {
+        $employee = Employee::factory()->for($this->user, 'createdBy')->create([
+            'is_active' => true,
+        ]);
+
+        $response = $this->deleteJson("/api/mobile/employees/{$employee->id}");
+
+        $response
+            ->assertForbidden()
+            ->assertJson([
+                'success' => false,
+                'message' => 'Karyawan masih aktif. Nonaktifkan dulu sebelum menghapus',
+                'error' => [
+                    'code' => 'FORBIDDEN_ACTION',
+                ],
+            ]);
+    }
+
     public function test_list_supports_search_and_inactive_filter(): void
     {
         Employee::factory()->for($this->user, 'createdBy')->create([
@@ -217,5 +265,6 @@ class EmployeeCrudTest extends TestCase
         ]));
         $assertNotFoundEnvelope($this->patchJson('/api/mobile/employees/999999/deactivate'));
         $assertNotFoundEnvelope($this->patchJson('/api/mobile/employees/999999/activate'));
+        $assertNotFoundEnvelope($this->deleteJson('/api/mobile/employees/999999'));
     }
 }

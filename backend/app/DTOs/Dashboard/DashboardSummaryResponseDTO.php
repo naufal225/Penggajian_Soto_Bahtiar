@@ -28,6 +28,7 @@ class DashboardSummaryResponseDTO
     public function __construct(
         public readonly string $todayDate,
         public readonly string $ownerName,
+        public readonly int $todayTotalAmount,
         public readonly int $activeEmployeeCount,
         public readonly int $todayFilledCount,
         public readonly int $todayUnfilledCount,
@@ -41,6 +42,7 @@ class DashboardSummaryResponseDTO
      * @return array{
      *     today_date: string,
      *     owner_name: string,
+     *     today_total_amount: int,
      *     active_employee_count: int,
      *     today_filled_count: int,
      *     today_unfilled_count: int,
@@ -70,6 +72,7 @@ class DashboardSummaryResponseDTO
         return [
             'today_date' => $this->todayDate,
             'owner_name' => $this->ownerName,
+            'today_total_amount' => $this->todayTotalAmount,
             'active_employee_count' => $this->activeEmployeeCount,
             'today_filled_count' => $this->todayFilledCount,
             'today_unfilled_count' => $this->todayUnfilledCount,

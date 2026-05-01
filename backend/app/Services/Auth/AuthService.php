@@ -5,6 +5,7 @@ namespace App\Services\Auth;
 use App\DTOs\Auth\LoginRequestDTO;
 use App\DTOs\Auth\LoginResponseDTO;
 use App\Exceptions\InvalidCredentialsException;
+use App\Models\User;
 use App\Repositories\Contracts\UserRepositoryInterface;
 use Illuminate\Support\Facades\Hash;
 
@@ -29,5 +30,25 @@ class AuthService
         $token = $user->createToken($requestDTO->deviceName)->plainTextToken;
 
         return LoginResponseDTO::fromUser($token, $user);
+    }
+
+    public function logout(User $user): void
+    {
+        $currentToken = $user->currentAccessToken();
+        if ($currentToken) {
+            $currentToken->delete();
+        }
+    }
+
+    /**
+     * @return array{id:int,name:string,email:string}
+     */
+    public function currentUserProfile(User $user): array
+    {
+        return [
+            'id' => $user->id,
+            'name' => $user->name,
+            'email' => $user->email,
+        ];
     }
 }

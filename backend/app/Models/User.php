@@ -7,6 +7,7 @@ use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
@@ -29,5 +30,30 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
         ];
+    }
+
+    public function createdEmployees(): HasMany
+    {
+        return $this->hasMany(Employee::class, 'created_by_user_id');
+    }
+
+    public function updatedEmployees(): HasMany
+    {
+        return $this->hasMany(Employee::class, 'updated_by_user_id');
+    }
+
+    public function createdDailyWages(): HasMany
+    {
+        return $this->hasMany(DailyWage::class, 'created_by_user_id');
+    }
+
+    public function updatedDailyWages(): HasMany
+    {
+        return $this->hasMany(DailyWage::class, 'updated_by_user_id');
+    }
+
+    public function createdWeeklyPayments(): HasMany
+    {
+        return $this->hasMany(WeeklyPayment::class, 'created_by_user_id');
     }
 }

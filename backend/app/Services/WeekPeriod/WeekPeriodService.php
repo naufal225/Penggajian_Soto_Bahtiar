@@ -44,7 +44,14 @@ class WeekPeriodService
             return $existingByDate;
         }
 
-        $current = $this->resolveCurrentWeek();
+        $current = $this->weekPeriodRepository->findCurrentOpenWeek();
+        if (! $current) {
+            return $this->weekPeriodRepository->create(
+                startDate: $date,
+                endDate: $date,
+            );
+        }
+
         $target = CarbonImmutable::createFromFormat('Y-m-d', $date);
         $start = CarbonImmutable::parse((string) $current->start_date);
         $end = CarbonImmutable::parse((string) $current->end_date);
@@ -120,7 +127,7 @@ class WeekPeriodService
         }
 
         $weekPeriod->status = $newStatus;
-        $weekPeriod->locked_at = null;
+        $weekPeriod->locked_at = $newStatus === WeekStatus::FullyPaid ? CarbonImmutable::now() : null;
 
         return $this->weekPeriodRepository->save($weekPeriod);
     }
@@ -194,6 +201,8 @@ class WeekPeriodService
             $aggregate = $aggregateRows->get($employeeId);
             $filledDays = (int) ($aggregate->filled_days ?? 0);
             $totalAmount = (int) ($aggregate->total_amount ?? 0);
+            $paidAmount = (int) ($aggregate->paid_amount ?? 0);
+            $unpaidAmount = (int) ($aggregate->unpaid_amount ?? 0);
             $paidRows = (int) ($aggregate->paid_rows ?? 0);
             $unpaidRows = (int) ($aggregate->unpaid_rows ?? 0);
             $isPaid = $filledDays > 0 && $paidRows > 0 && $unpaidRows === 0;
@@ -202,7 +211,11 @@ class WeekPeriodService
                 'employee_id' => $employee->id,
                 'employee_name' => $employee->name,
                 'total_amount' => $totalAmount,
+                'paid_amount' => $paidAmount,
+                'unpaid_amount' => $unpaidAmount,
                 'filled_days' => $filledDays,
+                'unpaid_days' => $unpaidRows,
+                'can_pay_now' => $unpaidAmount > 0 && $week->locked_at === null,
                 'payment_status' => $isPaid ? 'paid' : 'unpaid',
                 'paid_at' => $isPaid && ! empty($aggregate->paid_at)
                     ? CarbonImmutable::parse((string) $aggregate->paid_at)->toISOString()

@@ -6,6 +6,7 @@ use Database\Factories\EmployeeFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Employee extends Model
@@ -43,5 +44,15 @@ class Employee extends Model
     public function updatedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'updated_by_user_id');
+    }
+
+    public function dailyWages(): HasMany
+    {
+        return $this->hasMany(DailyWage::class, 'employee_id');
+    }
+
+    public function weeklyPayments(): HasMany
+    {
+        return $this->hasMany(WeeklyPayment::class, 'employee_id');
     }
 }
