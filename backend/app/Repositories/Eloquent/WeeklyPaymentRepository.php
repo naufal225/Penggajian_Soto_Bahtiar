@@ -6,6 +6,7 @@ use App\Models\WeeklyPayment;
 use App\Repositories\Contracts\WeeklyPaymentRepositoryInterface;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
 class WeeklyPaymentRepository implements WeeklyPaymentRepositoryInterface
 {
@@ -35,6 +36,45 @@ class WeeklyPaymentRepository implements WeeklyPaymentRepositoryInterface
         return $builder
             ->orderByDesc('paid_at')
             ->orderByDesc('id')
+            ->paginate(
+                perPage: $perPage,
+                columns: ['*'],
+                pageName: 'page',
+                page: $page
+            );
+    }
+
+    public function paginateHistoryCards(?int $weekPeriodId, int $page, int $perPage): LengthAwarePaginator
+    {
+        $builder = DB::table('daily_wages')
+            ->join('weekly_payments', 'daily_wages.paid_weekly_payment_id', '=', 'weekly_payments.id')
+            ->leftJoin('employees', 'daily_wages.employee_id', '=', 'employees.id')
+            ->where('weekly_payments.is_voided', false)
+            ->selectRaw('weekly_payments.id as payment_id')
+            ->selectRaw('weekly_payments.week_period_id as week_period_id')
+            ->selectRaw('daily_wages.employee_id as employee_id')
+            ->selectRaw('employees.name as employee_name')
+            ->selectRaw('weekly_payments.payment_scope as payment_scope')
+            ->selectRaw('SUM(daily_wages.amount) as total_amount')
+            ->selectRaw('weekly_payments.paid_at as paid_at')
+            ->selectRaw('weekly_payments.notes as notes')
+            ->groupBy(
+                'weekly_payments.id',
+                'weekly_payments.week_period_id',
+                'daily_wages.employee_id',
+                'employees.name',
+                'weekly_payments.payment_scope',
+                'weekly_payments.paid_at',
+                'weekly_payments.notes',
+            );
+
+        if ($weekPeriodId !== null) {
+            $builder->where('weekly_payments.week_period_id', $weekPeriodId);
+        }
+
+        return $builder
+            ->orderByDesc('weekly_payments.paid_at')
+            ->orderBy('employees.name')
             ->paginate(
                 perPage: $perPage,
                 columns: ['*'],
@@ -77,4 +117,3 @@ class WeeklyPaymentRepository implements WeeklyPaymentRepositoryInterface
         return $payment->refresh()->load(['employee', 'weekPeriod', 'dailyWages']);
     }
 }
-

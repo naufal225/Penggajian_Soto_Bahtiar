@@ -155,4 +155,174 @@ class WeeklyPaymentFlexibleFlowTest extends TestCase
 
         $this->assertNotSame($firstWeekId, $secondWeekId);
     }
+
+    public function test_history_cards_endpoint_returns_one_card_per_employee_for_each_payment(): void
+    {
+        CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-05-11 09:00:00'));
+
+        $user = User::factory()->create();
+        Sanctum::actingAs($user);
+
+        $employeeA = Employee::factory()->for($user, 'createdBy')->create(['name' => 'Asep', 'is_active' => true]);
+        $employeeB = Employee::factory()->for($user, 'createdBy')->create(['name' => 'Budi', 'is_active' => true]);
+        $employeeC = Employee::factory()->for($user, 'createdBy')->create(['name' => 'Cici', 'is_active' => true]);
+
+        $this->postJson('/api/mobile/daily-wages', [
+            'employee_id' => $employeeA->id,
+            'wage_date' => '2026-05-11',
+            'amount' => 50000,
+            'notes' => null,
+        ])->assertOk();
+
+        $this->postJson('/api/mobile/daily-wages', [
+            'employee_id' => $employeeB->id,
+            'wage_date' => '2026-05-11',
+            'amount' => 40000,
+            'notes' => null,
+        ])->assertOk();
+
+        $this->postJson('/api/mobile/daily-wages', [
+            'employee_id' => $employeeC->id,
+            'wage_date' => '2026-05-11',
+            'amount' => 30000,
+            'notes' => null,
+        ])->assertOk();
+
+        $this->postJson('/api/mobile/daily-wages', [
+            'employee_id' => $employeeA->id,
+            'wage_date' => '2026-05-12',
+            'amount' => 60000,
+            'notes' => null,
+        ])->assertOk();
+
+        $this->postJson('/api/mobile/daily-wages', [
+            'employee_id' => $employeeB->id,
+            'wage_date' => '2026-05-12',
+            'amount' => 45000,
+            'notes' => null,
+        ])->assertOk();
+
+        $weekPeriodId = (int) $this->getJson('/api/mobile/week-periods/current')->assertOk()->json('data.id');
+
+        CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-05-11 09:00:00'));
+        $employeePaymentId = (int) $this->postJson('/api/mobile/weekly-payments/employee', [
+            'week_period_id' => $weekPeriodId,
+            'employee_id' => $employeeA->id,
+            'notes' => 'Bayar Asep',
+        ])->assertOk()->json('data.payment_id');
+
+        CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-05-11 09:05:00'));
+        $this->postJson('/api/mobile/weekly-payments/all', [
+            'week_period_id' => $weekPeriodId,
+            'notes' => 'Bayar sisa minggu ini',
+        ])->assertOk();
+
+        $response = $this->getJson("/api/mobile/weekly-payments/history-cards?week_period_id={$weekPeriodId}&page=1&per_page=20")
+            ->assertOk()
+            ->assertJsonPath('meta.total', 3)
+            ->assertJsonCount(3, 'data');
+
+        $cards = collect($response->json('data'));
+
+        $this->assertSame(
+            [
+                "payment-2-employee-{$employeeB->id}",
+                "payment-2-employee-{$employeeC->id}",
+                "payment-1-employee-{$employeeA->id}",
+            ],
+            $cards->pluck('history_item_id')->all()
+        );
+
+        $this->assertSame(
+            ['Budi', 'Cici', 'Asep'],
+            $cards->pluck('employee_name')->all()
+        );
+
+        $this->assertSame(
+            [85000, 30000, 110000],
+            $cards->pluck('total_amount')->all()
+        );
+
+        $this->assertSame(
+            ['all', 'all', 'employee'],
+            $cards->pluck('payment_scope')->all()
+        );
+
+        $this->assertSame(
+            [false, false, false],
+            $cards->pluck('can_undo')->all()
+        );
+
+        $this->assertSame($employeePaymentId, $cards->last()['payment_id']);
+    }
+
+    public function test_history_cards_endpoint_excludes_voided_payment_and_marks_previous_week_as_not_undoable(): void
+    {
+        CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-05-05 09:00:00'));
+
+        $user = User::factory()->create();
+        Sanctum::actingAs($user);
+
+        $employeeA = Employee::factory()->for($user, 'createdBy')->create(['name' => 'Asep', 'is_active' => true]);
+        $employeeB = Employee::factory()->for($user, 'createdBy')->create(['name' => 'Budi', 'is_active' => true]);
+
+        $this->postJson('/api/mobile/daily-wages', [
+            'employee_id' => $employeeA->id,
+            'wage_date' => '2026-05-05',
+            'amount' => 40000,
+            'notes' => null,
+        ])->assertOk();
+
+        $this->postJson('/api/mobile/daily-wages', [
+            'employee_id' => $employeeB->id,
+            'wage_date' => '2026-05-05',
+            'amount' => 50000,
+            'notes' => null,
+        ])->assertOk();
+
+        $previousWeekId = (int) $this->getJson('/api/mobile/week-periods/current')->assertOk()->json('data.id');
+
+        $voidedPaymentId = (int) $this->postJson('/api/mobile/weekly-payments/employee', [
+            'week_period_id' => $previousWeekId,
+            'employee_id' => $employeeA->id,
+            'notes' => 'Pembayaran salah',
+        ])->assertOk()->json('data.payment_id');
+
+        $this->postJson("/api/mobile/weekly-payments/{$voidedPaymentId}/undo", [
+            'reason' => 'Salah catat',
+        ])->assertOk();
+
+        $activePaymentId = (int) $this->postJson('/api/mobile/weekly-payments/employee', [
+            'week_period_id' => $previousWeekId,
+            'employee_id' => $employeeA->id,
+            'notes' => 'Pembayaran benar',
+        ])->assertOk()->json('data.payment_id');
+
+        $this->postJson('/api/mobile/weekly-payments/employee', [
+            'week_period_id' => $previousWeekId,
+            'employee_id' => $employeeB->id,
+            'notes' => 'Pembayaran Budi',
+        ])->assertOk();
+
+        CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-05-12 10:00:00'));
+
+        $this->postJson('/api/mobile/daily-wages', [
+            'employee_id' => $employeeA->id,
+            'wage_date' => '2026-05-12',
+            'amount' => 50000,
+            'notes' => null,
+        ])->assertOk();
+
+        $response = $this->getJson("/api/mobile/weekly-payments/history-cards?week_period_id={$previousWeekId}&page=1&per_page=20")
+            ->assertOk()
+            ->assertJsonPath('meta.total', 2);
+
+        $cards = collect($response->json('data'));
+        $activeCard = $cards->firstWhere('payment_id', $activePaymentId);
+
+        $this->assertNotNull($activeCard);
+        $this->assertSame(40000, $activeCard['total_amount']);
+        $this->assertFalse($activeCard['can_undo']);
+        $this->assertFalse($cards->pluck('payment_id')->contains($voidedPaymentId));
+    }
 }

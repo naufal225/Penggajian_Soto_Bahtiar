@@ -17,6 +17,8 @@ interface WeeklyPaymentRepositoryInterface
 
     public function paginate(?int $weekPeriodId, int $page, int $perPage): LengthAwarePaginator;
 
+    public function paginateHistoryCards(?int $weekPeriodId, int $page, int $perPage): LengthAwarePaginator;
+
     public function findEmployeePaymentInWeek(int $weekPeriodId, int $employeeId): ?WeeklyPayment;
 
     public function findAllScopePaymentInWeek(int $weekPeriodId): ?WeeklyPayment;
@@ -25,4 +27,3 @@ interface WeeklyPaymentRepositoryInterface
 
     public function save(WeeklyPayment $payment): WeeklyPayment;
 }
-

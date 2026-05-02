@@ -9,6 +9,7 @@ use App\Exceptions\PaymentNotFoundException;
 use App\Exceptions\WeekAlreadyFullyPaidException;
 use App\Exceptions\WeekPeriodNotFoundException;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Api\Mobile\WeeklyPayment\ListWeeklyPaymentHistoryCardRequest;
 use App\Http\Requests\Api\Mobile\WeeklyPayment\ListWeeklyPaymentRequest;
 use App\Http\Requests\Api\Mobile\WeeklyPayment\PayAllRequest;
 use App\Http\Requests\Api\Mobile\WeeklyPayment\PayEmployeeRequest;
@@ -118,6 +119,26 @@ class WeeklyPaymentController extends Controller
 
         return ApiResponse::success(
             message: 'Riwayat pembayaran berhasil diambil',
+            data: $paginator->items(),
+            meta: [
+                'current_page' => $paginator->currentPage(),
+                'per_page' => $paginator->perPage(),
+                'total' => $paginator->total(),
+                'last_page' => $paginator->lastPage(),
+            ]
+        );
+    }
+
+    public function historyCards(ListWeeklyPaymentHistoryCardRequest $request): JsonResponse
+    {
+        $validated = $request->validated();
+        $page = (int) ($validated['page'] ?? 1);
+        $perPage = (int) ($validated['per_page'] ?? 20);
+        $weekPeriodId = isset($validated['week_period_id']) ? (int) $validated['week_period_id'] : null;
+        $paginator = $this->weeklyPaymentService->listHistoryCards($weekPeriodId, $page, $perPage);
+
+        return ApiResponse::success(
+            message: 'Card riwayat pembayaran berhasil diambil',
             data: $paginator->items(),
             meta: [
                 'current_page' => $paginator->currentPage(),

@@ -40,6 +40,7 @@ Route::prefix('mobile')->group(function () {
         Route::post('/weekly-payments/employee', [WeeklyPaymentController::class, 'payEmployee']);
         Route::post('/weekly-payments/all', [WeeklyPaymentController::class, 'payAll']);
         Route::get('/weekly-payments', [WeeklyPaymentController::class, 'index']);
+        Route::get('/weekly-payments/history-cards', [WeeklyPaymentController::class, 'historyCards']);
         Route::get('/weekly-payments/{paymentId}', [WeeklyPaymentController::class, 'show'])->whereNumber('paymentId');
         Route::post('/weekly-payments/{paymentId}/undo', [WeeklyPaymentController::class, 'undo'])->whereNumber('paymentId');
 

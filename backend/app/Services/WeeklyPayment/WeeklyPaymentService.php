@@ -19,6 +19,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Pagination\LengthAwarePaginator as Paginator;
 use Illuminate\Support\Facades\DB;
+use stdClass;
 
 class WeeklyPaymentService
 {
@@ -159,6 +160,43 @@ class WeeklyPaymentService
         $paginator = $this->weeklyPaymentRepository->paginate($weekPeriodId, $page, $perPage);
         $items = collect($paginator->items())
             ->map(fn (WeeklyPayment $payment): array => (new WeeklyPaymentResponseDTO($payment))->toArray())
+            ->all();
+
+        return new Paginator(
+            items: $items,
+            total: $paginator->total(),
+            perPage: $paginator->perPage(),
+            currentPage: $paginator->currentPage(),
+            options: [
+                'path' => request()->url(),
+                'query' => request()->query(),
+            ],
+        );
+    }
+
+    public function listHistoryCards(?int $weekPeriodId, int $page, int $perPage): LengthAwarePaginator
+    {
+        $paginator = $this->weeklyPaymentRepository->paginateHistoryCards($weekPeriodId, $page, $perPage);
+        $currentWeekId = $this->weekPeriodService->resolveCurrentWeek()->id;
+        $items = collect($paginator->items())
+            ->map(function (stdClass $row) use ($currentWeekId): array {
+                $paymentId = (int) $row->payment_id;
+                $employeeId = (int) $row->employee_id;
+                $weekId = (int) $row->week_period_id;
+
+                return [
+                    'history_item_id' => "payment-{$paymentId}-employee-{$employeeId}",
+                    'payment_id' => $paymentId,
+                    'week_period_id' => $weekId,
+                    'employee_id' => $employeeId,
+                    'employee_name' => $row->employee_name !== null ? (string) $row->employee_name : null,
+                    'payment_scope' => (string) $row->payment_scope,
+                    'total_amount' => (int) $row->total_amount,
+                    'paid_at' => CarbonImmutable::parse((string) $row->paid_at)->toISOString(),
+                    'notes' => $row->notes !== null ? (string) $row->notes : null,
+                    'can_undo' => $weekId === $currentWeekId,
+                ];
+            })
             ->all();
 
         return new Paginator(
