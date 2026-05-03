@@ -86,7 +86,8 @@ Urutan prioritas implementasi:
 
 ### Local DB
 
-* Gunakan **Realm**.
+* Gunakan **expo-sqlite**.
+* Status koneksi gunakan **expo-network**.
 
 ### State per record
 
@@ -151,7 +152,7 @@ Urutan prioritas implementasi:
   * ViewModel
   * Components (terpisah)
   * Styles (terpisah)
-  * Realm DB
+  * SQLite DB (`expo-sqlite`)
 
 ---
 
