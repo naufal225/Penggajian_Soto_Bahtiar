@@ -1,6 +1,7 @@
 import type { ApiSuccessResponse } from '@/types/api';
 import type {
   DailyWageByDateResponse,
+  DailyWageHistoryItem,
   DailyWagePayload,
   DailyWageResponse,
   PaginationMeta,
@@ -17,7 +18,6 @@ import type {
   WeeklyPaymentHistoryCard,
   WeeklyPaymentHistoryItem,
   WeeklyPaymentUndoResponse,
-  WeeklySummaryPdfResponse,
 } from '@/types/wage';
 
 import { getJson, postJson, putJson } from '@/services/api/http-client';
@@ -58,6 +58,28 @@ export async function getDailyWagesByDate(date: string): Promise<DailyWageByDate
   });
 
   return response.data;
+}
+
+export async function getDailyWageHistory(
+  startDate: string,
+  endDate: string,
+  page = 1,
+  perPage = 100
+): Promise<PaginatedItemsResponse<DailyWageHistoryItem>> {
+  const response = await getJson<ApiSuccessResponse<DailyWageHistoryItem[]>>('/daily-wages/history', {
+    requiresAuth: true,
+    query: {
+      start_date: startDate,
+      end_date: endDate,
+      page,
+      per_page: perPage,
+    },
+  });
+
+  return {
+    items: response.data,
+    meta: normalizeMeta(response.meta, perPage),
+  };
 }
 
 export async function createDailyWage(payload: DailyWagePayload): Promise<DailyWageResponse> {
@@ -126,17 +148,6 @@ export async function payWeeklyEmployee(payload: PayEmployeePayload): Promise<Pa
 export async function payWeeklyAll(payload: PayAllPayload): Promise<PayAllResponse> {
   const response = await postJson<ApiSuccessResponse<PayAllResponse>, PayAllPayload>('/weekly-payments/all', payload, {
     requiresAuth: true,
-  });
-
-  return response.data;
-}
-
-export async function getWeeklySummaryPdf(weekPeriodId: number): Promise<WeeklySummaryPdfResponse> {
-  const response = await getJson<ApiSuccessResponse<WeeklySummaryPdfResponse>>('/reports/weekly-summary-pdf', {
-    requiresAuth: true,
-    query: {
-      week_period_id: weekPeriodId,
-    },
   });
 
   return response.data;

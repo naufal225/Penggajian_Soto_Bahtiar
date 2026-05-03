@@ -56,6 +56,18 @@ export interface DailyWageResponse {
   updated_at: string;
 }
 
+export interface DailyWageHistoryItem {
+  id: number;
+  employee_id: number;
+  employee_name: string | null;
+  week_period_id: number;
+  wage_date: string;
+  amount: number;
+  is_paid: boolean;
+  is_locked: boolean;
+  updated_at: string;
+}
+
 export interface WeekPeriodSummary {
   employee_count: number;
   filled_wage_count: number;
@@ -131,12 +143,6 @@ export interface PayAllResponse {
   paid_employee_count: number;
   paid_at: string;
   week_status_after_payment: 'open' | 'partial_paid' | 'fully_paid';
-}
-
-export interface WeeklySummaryPdfResponse {
-  file_name: string;
-  download_url: string;
-  expires_at: string;
 }
 
 export type WageSyncState = 'pending' | 'synced' | 'failed' | 'conflict';

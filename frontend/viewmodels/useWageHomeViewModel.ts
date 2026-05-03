@@ -1,19 +1,18 @@
 import { useNetworkState } from 'expo-network';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Linking } from 'react-native';
 
 import {
   createDailyWage,
   getCurrentWeekPeriod,
   getDailyWagesByDate,
   getWeekPeriodDetail,
-  getWeeklySummaryPdf,
   payWeeklyAll,
   payWeeklyEmployee,
-  pushSyncChanges,
   updateDailyWage,
 } from '@/services/api/wage-api';
 import { ApiClientError } from '@/services/api/http-client';
+import { loadWageReportData } from '@/services/report/wage-report-data-service';
+import { generateWeeklyWageReportPdf, isPdfSharingAvailable, sharePdfFile } from '@/services/report/wage-pdf-service';
 import {
   cacheCurrentWeekDetail,
   cacheDailyWagesByDate,
@@ -248,8 +247,12 @@ export function useWageHomeViewModel({ onUnauthorized }: UseWageHomeViewModelOpt
   const [submitting, setSubmitting] = useState(false);
   const [paymentActionLoading, setPaymentActionLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [sharingExport, setSharingExport] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
+  const [exportMessage, setExportMessage] = useState<string | null>(null);
+  const [lastExportedFileUri, setLastExportedFileUri] = useState<string | null>(null);
+  const [lastExportedFileName, setLastExportedFileName] = useState<string | null>(null);
   const [pendingSyncCount, setPendingSyncCount] = useState(0);
   const [modal, setModal] = useState<WageActionModal>(null);
 
@@ -854,16 +857,35 @@ export function useWageHomeViewModel({ onUnauthorized }: UseWageHomeViewModelOpt
     }
   }, [employeeRows, loadData, modal, onUnauthorized, selectedDate, weekDetail]);
 
-  const exportPdf = useCallback(async () => {
-    if (!weekDetail || exporting) {
+  const exportPdf = useCallback(async (startDate: string, endDate: string) => {
+    if (exporting) {
+      return;
+    }
+
+    if (hasDraftChanges) {
+      setExportMessage('Simpan perubahan dulu sebelum export PDF');
+      setError(null);
       return;
     }
 
     setExporting(true);
+    setError(null);
+    setExportMessage(null);
 
     try {
-      const response = await getWeeklySummaryPdf(weekDetail.id);
-      await Linking.openURL(response.download_url);
+      const report = await loadWageReportData(startDate, endDate);
+      if (report.rows.length === 0) {
+        setExportMessage('Belum ada data gaji pada rentang tanggal ini');
+        return;
+      }
+
+      const result = await generateWeeklyWageReportPdf({
+        businessName: 'Soto Bahtiar',
+        report,
+      });
+      setLastExportedFileUri(result.fileUri);
+      setLastExportedFileName(result.fileName);
+      setExportMessage(result.savedToDownloads ? `PDF tersimpan di folder Download: ${result.fileName}` : `PDF tersimpan di HP: ${result.fileName}`);
     } catch (rawError) {
       const errorObject = rawError instanceof ApiClientError ? rawError : new ApiClientError('Terjadi masalah, coba lagi', 'UNKNOWN_ERROR');
 
@@ -872,11 +894,45 @@ export function useWageHomeViewModel({ onUnauthorized }: UseWageHomeViewModelOpt
         return;
       }
 
-      setError(mapGlobalErrorMessage(errorObject));
+      if (rawError instanceof Error && rawError.message === 'DOWNLOAD_DIRECTORY_REQUIRED') {
+        setError('Pilih folder Download untuk menyimpan PDF');
+        return;
+      }
+
+      setError('PDF belum berhasil dibuat');
     } finally {
       setExporting(false);
     }
-  }, [exporting, onUnauthorized, weekDetail]);
+  }, [exporting, hasDraftChanges, onUnauthorized]);
+
+  const shareLastExportedPdf = useCallback(async () => {
+    if (!lastExportedFileUri || sharingExport) {
+      return;
+    }
+
+    setSharingExport(true);
+    setError(null);
+
+    try {
+      const canShare = await isPdfSharingAvailable();
+      if (!canShare) {
+        setExportMessage('PDF sudah tersimpan di HP');
+        return;
+      }
+
+      await sharePdfFile(lastExportedFileUri);
+    } catch {
+      setError('PDF belum berhasil dibagikan');
+    } finally {
+      setSharingExport(false);
+    }
+  }, [lastExportedFileUri, sharingExport]);
+
+  const clearExportFeedback = useCallback(() => {
+    setExportMessage(null);
+    setLastExportedFileName(null);
+    setLastExportedFileUri(null);
+  }, []);
 
   const retry = useCallback(() => {
     void loadData(selectedDate, 'initial');
@@ -892,8 +948,12 @@ export function useWageHomeViewModel({ onUnauthorized }: UseWageHomeViewModelOpt
     submitting,
     paymentActionLoading,
     exporting,
+    sharingExport,
     error,
     infoMessage,
+    exportMessage,
+    lastExportedFileName,
+    clearExportFeedback,
     pendingSyncCount,
     isOffline,
     selectedDate,
@@ -920,6 +980,7 @@ export function useWageHomeViewModel({ onUnauthorized }: UseWageHomeViewModelOpt
     confirmDiscardAndChangeDate,
     saveAllChanges,
     exportPdf,
+    shareLastExportedPdf,
     retry,
     refresh,
   };

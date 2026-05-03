@@ -1,6 +1,6 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useMemo, useRef } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
@@ -20,6 +20,101 @@ import { clearAuthToken } from '@/services/storage/session-storage';
 import { useWageHomeViewModel } from '@/viewmodels/useWageHomeViewModel';
 
 const PRESET_AMOUNTS = [50000, 70000, 100000];
+const DAY_NAMES = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
+
+type ExportField = 'start' | 'end';
+
+function toDate(dateString: string): Date {
+  const [year, month, day] = dateString.split('-').map(Number);
+  return new Date(year, (month ?? 1) - 1, day ?? 1);
+}
+
+function toDateString(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function formatTodayDate(): string {
+  return toDateString(new Date());
+}
+
+function countInclusiveDays(startDate: string, endDate: string): number {
+  const start = toDate(startDate);
+  const end = toDate(endDate);
+  const diff = end.getTime() - start.getTime();
+  return Math.floor(diff / 86400000) + 1;
+}
+
+function getMonthLabel(date: Date): string {
+  return date.toLocaleDateString('id-ID', {
+    month: 'long',
+    year: 'numeric',
+  });
+}
+
+function formatDateRangeLabel(dateString: string): string {
+  const date = toDate(dateString);
+
+  if (Number.isNaN(date.getTime())) {
+    return dateString;
+  }
+
+  return date.toLocaleDateString('id-ID', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
+}
+
+function getCalendarDays(monthCursor: Date): Array<{ key: string; label: string; dateString: string | null }> {
+  const monthStart = new Date(monthCursor.getFullYear(), monthCursor.getMonth(), 1);
+  const monthEnd = new Date(monthCursor.getFullYear(), monthCursor.getMonth() + 1, 0);
+  const leadingEmptyCount = monthStart.getDay();
+  const totalDays = monthEnd.getDate();
+  const cells: Array<{ key: string; label: string; dateString: string | null }> = [];
+
+  for (let index = 0; index < leadingEmptyCount; index += 1) {
+    cells.push({
+      key: `empty-start-${index}`,
+      label: '',
+      dateString: null,
+    });
+  }
+
+  for (let day = 1; day <= totalDays; day += 1) {
+    const currentDate = new Date(monthCursor.getFullYear(), monthCursor.getMonth(), day);
+    cells.push({
+      key: toDateString(currentDate),
+      label: String(day),
+      dateString: toDateString(currentDate),
+    });
+  }
+
+  while (cells.length % 7 !== 0) {
+    const index = cells.length;
+    cells.push({
+      key: `empty-end-${index}`,
+      label: '',
+      dateString: null,
+    });
+  }
+
+  return cells;
+}
+
+function validateRange(startDate: string, endDate: string): string | null {
+  if (endDate < startDate) {
+    return 'Tanggal akhir tidak boleh sebelum tanggal awal';
+  }
+
+  if (countInclusiveDays(startDate, endDate) > 31) {
+    return 'Rentang laporan maksimal 31 hari';
+  }
+
+  return null;
+}
 
 function formatRupiah(value: number): string {
   return `Rp ${new Intl.NumberFormat('id-ID').format(value)}`;
@@ -68,6 +163,15 @@ export default function WageHomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const hasFocusedRef = useRef(false);
+  const [reportModalVisible, setReportModalVisible] = useState(false);
+  const [reportStartDate, setReportStartDate] = useState<string>(() => formatTodayDate());
+  const [reportEndDate, setReportEndDate] = useState<string>(() => formatTodayDate());
+  const [reportField, setReportField] = useState<ExportField>('start');
+  const [reportRangeError, setReportRangeError] = useState<string | null>(null);
+  const [calendarMonth, setCalendarMonth] = useState<Date>(() => {
+    const today = toDate(formatTodayDate());
+    return new Date(today.getFullYear(), today.getMonth(), 1);
+  });
   const handleUnauthorized = useCallback(() => {
     void clearAuthToken();
     router.replace('/login');
@@ -120,6 +224,63 @@ export default function WageHomeScreen() {
 
     return `Simpan Semua (${viewModel.changedCount})`;
   }, [viewModel.changedCount]);
+
+  const calendarDays = useMemo(() => getCalendarDays(calendarMonth), [calendarMonth]);
+
+  const openReportModal = useCallback(() => {
+    const nextStartDate = viewModel.weekInfo?.start_date ?? viewModel.selectedDate;
+    const nextEndDate = viewModel.selectedDate < nextStartDate ? nextStartDate : viewModel.selectedDate;
+    setReportStartDate(nextStartDate);
+    setReportEndDate(nextEndDate);
+    setReportField('start');
+    setReportRangeError(null);
+    const monthDate = toDate(nextStartDate);
+    setCalendarMonth(new Date(monthDate.getFullYear(), monthDate.getMonth(), 1));
+    setReportModalVisible(true);
+  }, [viewModel.selectedDate, viewModel.weekInfo]);
+
+  const closeReportModal = useCallback(() => {
+    if (viewModel.exporting) {
+      return;
+    }
+
+    setReportModalVisible(false);
+    setReportRangeError(null);
+  }, [viewModel.exporting]);
+
+  const moveCalendarMonth = useCallback((delta: number) => {
+    setCalendarMonth((previous) => new Date(previous.getFullYear(), previous.getMonth() + delta, 1));
+  }, []);
+
+  const selectCalendarDate = useCallback(
+    (dateString: string) => {
+      if (reportField === 'start') {
+        const nextEndDate = reportEndDate < dateString ? dateString : reportEndDate;
+        setReportStartDate(dateString);
+        setReportEndDate(nextEndDate);
+        setReportField('end');
+        setReportRangeError(validateRange(dateString, nextEndDate));
+        return;
+      }
+
+      const nextStartDate = reportStartDate > dateString ? dateString : reportStartDate;
+      setReportStartDate(nextStartDate);
+      setReportEndDate(dateString);
+      setReportRangeError(validateRange(nextStartDate, dateString));
+    },
+    [reportEndDate, reportField, reportStartDate]
+  );
+
+  const confirmExportReport = useCallback(async () => {
+    const nextError = validateRange(reportStartDate, reportEndDate);
+    if (nextError) {
+      setReportRangeError(nextError);
+      return;
+    }
+
+    await viewModel.exportPdf(reportStartDate, reportEndDate);
+    setReportModalVisible(false);
+  }, [reportEndDate, reportStartDate, viewModel]);
 
   if (viewModel.loading && viewModel.employeeRows.length === 0) {
     return (
@@ -180,13 +341,13 @@ export default function WageHomeScreen() {
               <MaterialIcons name="history" size={18} color="#1D4ED8" />
               <Text style={styles.outlineActionText}>Riwayat</Text>
             </Pressable>
-            <Pressable style={styles.outlineActionButton} onPress={viewModel.exportPdf} disabled={viewModel.exporting}>
+            <Pressable style={styles.outlineActionButton} onPress={openReportModal} disabled={viewModel.exporting}>
               {viewModel.exporting ? (
                 <ActivityIndicator color="#1D4ED8" />
               ) : (
                 <>
                   <MaterialIcons name="picture-as-pdf" size={18} color="#1D4ED8" />
-                  <Text style={styles.outlineActionText}>Export PDF</Text>
+                  <Text style={styles.outlineActionText}>Simpan PDF</Text>
                 </>
               )}
             </Pressable>
@@ -205,6 +366,28 @@ export default function WageHomeScreen() {
             {viewModel.isOffline ? <Text style={styles.infoBannerText}>Tidak ada koneksi internet</Text> : null}
             {viewModel.pendingSyncCount > 0 ? (
               <Text style={styles.infoBannerText}>Belum terkirim: {viewModel.pendingSyncCount}</Text>
+            ) : null}
+          </View>
+        ) : null}
+
+        {viewModel.exportMessage || viewModel.lastExportedFileName ? (
+          <View style={styles.exportBanner}>
+            <Pressable style={styles.exportBannerCloseButton} onPress={viewModel.clearExportFeedback}>
+              <MaterialIcons name="close" size={18} color="#15803D" />
+            </Pressable>
+            {viewModel.exportMessage ? <Text style={styles.exportBannerText}>{viewModel.exportMessage}</Text> : null}
+            {viewModel.lastExportedFileName ? <Text style={styles.exportBannerFileText}>{viewModel.lastExportedFileName}</Text> : null}
+            {viewModel.lastExportedFileName ? (
+              <Pressable
+                style={[styles.exportShareButton, viewModel.sharingExport ? styles.exportShareButtonDisabled : null]}
+                onPress={viewModel.shareLastExportedPdf}
+                disabled={viewModel.sharingExport}>
+                {viewModel.sharingExport ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.exportShareButtonText}>Bagikan PDF</Text>
+                )}
+              </Pressable>
             ) : null}
           </View>
         ) : null}
@@ -368,6 +551,104 @@ export default function WageHomeScreen() {
                   )}
                 </Pressable>
               )}
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal transparent visible={reportModalVisible} animationType="fade" onRequestClose={closeReportModal}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.reportModalHeader}>
+              <Text style={styles.modalTitle}>Pilih Tanggal Laporan</Text>
+              <Pressable onPress={closeReportModal} style={styles.reportModalCloseButton}>
+                <MaterialIcons name="close" size={20} color="#475569" />
+              </Pressable>
+            </View>
+
+            <Text style={styles.modalDescription}>Pilih tanggal awal dan akhir. Maksimal 31 hari.</Text>
+
+            <View style={styles.reportRangeRow}>
+              <Pressable
+                style={[styles.reportRangeButton, reportField === 'start' ? styles.reportRangeButtonActive : null]}
+                onPress={() => setReportField('start')}>
+                <Text style={styles.reportRangeLabel}>Dari Tanggal</Text>
+                <Text style={[styles.reportRangeValue, reportField === 'start' ? styles.reportRangeValueActive : null]}>
+                  {formatDateRangeLabel(reportStartDate)}
+                </Text>
+              </Pressable>
+
+              <Pressable
+                style={[styles.reportRangeButton, reportField === 'end' ? styles.reportRangeButtonActive : null]}
+                onPress={() => setReportField('end')}>
+                <Text style={styles.reportRangeLabel}>Sampai Tanggal</Text>
+                <Text style={[styles.reportRangeValue, reportField === 'end' ? styles.reportRangeValueActive : null]}>
+                  {formatDateRangeLabel(reportEndDate)}
+                </Text>
+              </Pressable>
+            </View>
+
+            <View style={styles.calendarHeaderRow}>
+              <Pressable style={styles.calendarNavButton} onPress={() => moveCalendarMonth(-1)}>
+                <MaterialIcons name="chevron-left" size={20} color="#1D4ED8" />
+              </Pressable>
+              <Text style={styles.calendarMonthLabel}>{getMonthLabel(calendarMonth)}</Text>
+              <Pressable style={styles.calendarNavButton} onPress={() => moveCalendarMonth(1)}>
+                <MaterialIcons name="chevron-right" size={20} color="#1D4ED8" />
+              </Pressable>
+            </View>
+
+            <View style={styles.calendarWeekHeaderRow}>
+              {DAY_NAMES.map((dayName) => (
+                <Text key={dayName} style={styles.calendarWeekHeaderText}>
+                  {dayName}
+                </Text>
+              ))}
+            </View>
+
+            <View style={styles.calendarGrid}>
+              {calendarDays.map((item) => {
+                const isEmpty = item.dateString === null;
+                const isSelectedStart = item.dateString === reportStartDate;
+                const isSelectedEnd = item.dateString === reportEndDate;
+                const isRangeDay =
+                  item.dateString !== null && item.dateString >= reportStartDate && item.dateString <= reportEndDate;
+
+                return (
+                  <Pressable
+                    key={item.key}
+                    style={[
+                      styles.calendarDayCell,
+                      isRangeDay ? styles.calendarDayInRange : null,
+                      isSelectedStart || isSelectedEnd ? styles.calendarDaySelected : null,
+                      isEmpty ? styles.calendarDayEmpty : null,
+                    ]}
+                    onPress={() => (item.dateString ? selectCalendarDate(item.dateString) : undefined)}
+                    disabled={isEmpty}>
+                    <Text
+                      style={[
+                        styles.calendarDayText,
+                        isRangeDay ? styles.calendarDayTextInRange : null,
+                        isSelectedStart || isSelectedEnd ? styles.calendarDayTextSelected : null,
+                        isEmpty ? styles.calendarDayTextEmpty : null,
+                      ]}>
+                      {item.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            <Text style={styles.reportModalInfoText}>Total rentang: {countInclusiveDays(reportStartDate, reportEndDate)} hari</Text>
+            {reportRangeError ? <Text style={styles.reportModalErrorText}>{reportRangeError}</Text> : null}
+
+            <View style={styles.modalActionRow}>
+              <Pressable style={styles.modalCancelButton} onPress={closeReportModal} disabled={viewModel.exporting}>
+                <Text style={styles.modalCancelText}>Batal</Text>
+              </Pressable>
+              <Pressable style={styles.modalConfirmButton} onPress={confirmExportReport} disabled={viewModel.exporting}>
+                {viewModel.exporting ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.modalConfirmText}>Simpan PDF</Text>}
+              </Pressable>
             </View>
           </View>
         </View>
@@ -863,5 +1144,177 @@ const styles = StyleSheet.create({
     color: '#1D4ED8',
     fontSize: 13,
     textAlign: 'center',
+  },
+  exportBanner: {
+    position: 'relative',
+    borderRadius: 12,
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 8,
+  },
+  exportBannerCloseButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  exportBannerText: {
+    color: '#166534',
+    fontSize: 13,
+    textAlign: 'center',
+    fontWeight: '700',
+    paddingRight: 22,
+  },
+  exportBannerFileText: {
+    color: '#15803D',
+    fontSize: 12,
+    textAlign: 'center',
+    paddingRight: 22,
+  },
+  exportShareButton: {
+    minHeight: 42,
+    borderRadius: 10,
+    backgroundColor: '#16A34A',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+  },
+  exportShareButtonDisabled: {
+    opacity: 0.7,
+  },
+  exportShareButtonText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  reportModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  reportModalCloseButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F1F5F9',
+  },
+  reportRangeRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  reportRangeButton: {
+    flex: 1,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    backgroundColor: '#F8FAFC',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 4,
+  },
+  reportRangeButtonActive: {
+    borderColor: '#2563EB',
+    backgroundColor: '#EFF6FF',
+  },
+  reportRangeLabel: {
+    color: '#64748B',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  reportRangeValue: {
+    color: '#0F172A',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  reportRangeValueActive: {
+    color: '#1D4ED8',
+  },
+  calendarHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  calendarNavButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#EFF6FF',
+  },
+  calendarMonthLabel: {
+    color: '#0F172A',
+    fontSize: 15,
+    fontWeight: '700',
+    textTransform: 'capitalize',
+  },
+  calendarWeekHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  calendarWeekHeaderText: {
+    flex: 1,
+    color: '#64748B',
+    fontSize: 12,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  calendarGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  calendarDayCell: {
+    width: '14.2857%',
+    aspectRatio: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
+    marginBottom: 6,
+  },
+  calendarDayEmpty: {
+    backgroundColor: 'transparent',
+  },
+  calendarDayInRange: {
+    backgroundColor: '#DBEAFE',
+  },
+  calendarDaySelected: {
+    backgroundColor: '#2563EB',
+  },
+  calendarDayText: {
+    color: '#0F172A',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  calendarDayTextEmpty: {
+    color: 'transparent',
+  },
+  calendarDayTextInRange: {
+    color: '#1D4ED8',
+  },
+  calendarDayTextSelected: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  reportModalInfoText: {
+    color: '#334155',
+    fontSize: 13,
+    textAlign: 'center',
+    fontWeight: '600',
+  },
+  reportModalErrorText: {
+    color: '#DC2626',
+    fontSize: 13,
+    textAlign: 'center',
+    fontWeight: '600',
   },
 });

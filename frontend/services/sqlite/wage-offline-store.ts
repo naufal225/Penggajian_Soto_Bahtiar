@@ -3,6 +3,7 @@ import type { CachedWageSnapshot, SyncOverview } from '@/types/offline';
 import type {
   DailyWageByDateEmployee,
   DailyWageByDateResponse,
+  DailyWageHistoryItem,
   DailyWageItem,
   SyncPushChange,
   SyncPushResultItem,
@@ -1069,6 +1070,33 @@ export async function getFallbackOfflineWageSnapshot(date: string): Promise<Cach
     weekDetail: pseudoDetail,
     cachedAt,
   };
+}
+
+export async function getCachedDailyWageHistoryRange(startDate: string, endDate: string): Promise<DailyWageHistoryItem[]> {
+  const db = await getMobileDatabase();
+  const rows = await db.getAllAsync<DailyWageCacheRow>(
+    `
+      SELECT
+        cache_key, week_period_id, wage_date, employee_id, employee_name, server_id, client_uuid, amount, notes,
+        is_paid, is_locked, paid_at, updated_at, sync_state, cached_at
+      FROM ${DAILY_WAGE_CACHE_TABLE}
+      WHERE wage_date >= ? AND wage_date <= ?
+      ORDER BY wage_date ASC, employee_name ASC
+    `,
+    [startDate, endDate]
+  );
+
+  return rows.map((row) => ({
+    id: row.server_id ?? 0,
+    employee_id: row.employee_id,
+    employee_name: row.employee_name,
+    week_period_id: row.week_period_id,
+    wage_date: row.wage_date,
+    amount: row.amount,
+    is_paid: row.is_paid === 1,
+    is_locked: row.is_locked === 1,
+    updated_at: row.updated_at,
+  }));
 }
 
 export async function saveOfflineDailyWage(params: {
